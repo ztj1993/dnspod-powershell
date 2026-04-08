@@ -4,51 +4,54 @@ A dynamic domain name client implemented purely in PowerShell based on DNSPod us
 
 This software is converted from `rehiy/dnspod-shell` and maintains the same configuration commands and calling methods as the original project.
 
-## Usage
-
-Set execution policy:
-```
+## Usage (reference ddnspod.ps1)
+```powershell
+# Set execution policy
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-Execute remote script:
-```
+# Execute remote script
 irm https://raw.githubusercontent.com/ztj1993/dnspod-powershell/refs/heads/main/ardnspod.ps1 | iex
-```
-
-Set token:
-```
+# Set token:
 $arToken = "12345,7676f344eaeaea9074c123451234512d"
-```
-
-Set whether to create new record if domain is not defined (as needed):
-```
+# Set whether to create new record if domain is not defined (as needed):
 $arIsCreateRecord = 1
-```
-
-Domain update:
-```
+# Domain update:
 arDdnsCheck test.org subdomain
 ```
 
-## Scheduled Execution
+## Other Usage Methods
 
-Download script to local:
-```
+### Windows PowerShell Environment Automatic Installation (reference auto_install.ps1)
+This script will create a scheduled task that executes every hour.
+
+The downloaded script is located in the `%USERPROFILE%\Documents\PowerShell\DDNS` directory.
+
+To clean up, simply delete the directory scripts and the scheduled task.
+```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-$CodeUri = "https://raw.githubusercontent.com/ztj1993/dnspod-powershell/refs/heads/main"
-$ScriptDir = "$env:USERPROFILE\Documents\PowerShell\DDNS"
-New-Item -Path "$ScriptDir" -ItemType Directory -Force
-iwr "$CodeUri/ardnspod.ps1" -OutFile "$ScriptDir\ardnspod.ps1"
-iwr "$CodeUri/ddnspod.ps1" -OutFile "$ScriptDir\ddnspod.ps1"
+
+$env:AR_TOKEN="12345,7676f344eaeaea9074c123451234512d"
+$env:AR_DOMAIN="test.org"
+$env:AR_SUBDOMAIN="subdomain"
+$env:AR_IP_VERSION="6"
+$env:AR_IS_CREATE_RECORD="true"
+
+irm https://raw.githubusercontent.com/ztj1993/dnspod-powershell/refs/heads/main/auto_install.ps1 | iex
 ```
 
-Edit the `ddnspod.ps1` script, change `arToken` and `arDdnsCheck` commands to the correct configuration.
+### Windows CMD Environment Automatic Installation (reference auto_install.bat)
+This script will create a scheduled task that executes every hour.
 
-Create scheduled task:
-```
-$Cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ddnspod.ps1"
-schtasks /create /sc hourly /tn "DdnsTask" /tr "$Cmd" /ru SYSTEM /wd "$ScriptDir"
+The downloaded script is located in the `%USERPROFILE%\Documents\PowerShell\DDNS` directory.
+
+To clean up, simply delete the directory scripts and the scheduled task.
+```bat
+set TASK_NAME=DdnsTask
+set AR_TOKEN=12345,7676f344eaeaea9074c123451234512d
+set AR_DOMAIN=test.org
+set AR_SUBDOMAIN=subdomain
+set AR_IP_VERSION=6
+set AR_IS_CREATE_RECORD=true
+curl -sS -k -o %TEMP%\ddnspod.bat https://raw.githubusercontent.com/ztj1993/dnspod-powershell/refs/heads/main/auto_install.bat && %TEMP%\ddnspod.bat
 ```
 
 (Appendix) Run task immediately:
@@ -61,37 +64,36 @@ schtasks /run /tn "DdnsTask"
 schtasks /delete /tn "DdnsTask" /f
 ```
 
-(Appendix) Quick create scheduled task:
-```
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-$ScriptName = "DdnsTask.ps1"
-$ScriptLog = "DdnsTask.log"
-$ScriptDir = "$env:USERPROFILE\Documents\PowerShell\DDNS"
-$ScriptFile = Join-Path $ScriptDir $ScriptName
-New-Item -Path "$ScriptDir" -ItemType Directory -Force
-$Script = @'
-irm https://raw.githubusercontent.com/ztj1993/dnspod-powershell/refs/heads/main/ardnspod.ps1 | iex
-$arToken = "12345,7676f344eaeaea9074c123451234512d"
-arDdnsCheck test.org subdomain
-'@
-$Script | Out-File -FilePath $ScriptFile -Encoding UTF8
-$Cmd = "cmd /c cd /d $ScriptDir && powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptName >> $ScriptLog"
-schtasks /create /sc hourly /tn "DdnsTask" /tr "$Cmd" /ru SYSTEM
-```
+## Available Command Line Commands
 
-## Other Methods
-
-Manually create configuration:
+Manually create domain record:
 ```
 arDdnsCreate test.org subdomain 4 192.168.0.100
 ```
 
-Delete domain configuration:
+Delete domain record:
 ```
 arDdnsDelete test.org subdomain 4
 ```
 
+## Other Common Commands
+
+Run task immediately:
+```
+schtasks /run /tn "DdnsTask"
+```
+
+Delete scheduled task:
+```
+schtasks /delete /tn "DdnsTask" /f
+```
+
 ## Recent Updates
+
+2026/04/08
+
+- Added auto_install.cmd automatic installation script
+- Update README
 
 2025/03/19
 
