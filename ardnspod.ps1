@@ -69,90 +69,71 @@ function arRequest {
     }
 }
 
-# Get IPv4 by ip route or network
-function arWanIp4 {
-    $hostIp = arRequest $arIp4QueryUrl
-
-    if (-not $hostIp) {
-        arLog "> arWanIp4 - Can't get ip address"
-        return $true
-    }
-
-    if ($hostIp -notmatch '^[0-9\.]+$') {
-        arLog "> arWanIp4 - Invalid ip address"
-        return $false
-    }
-
-    return $hostIp
-}
-
-# Get IPv4 from a specific interface
-# Args: interface
-function arDevIp4 {
+# Get ip config by ip version
+# Args: ipVersion
+function arGetIpConfig {
     param (
-        [string]$interface
+        [string]$ipVersion
     )
 
-    $adapter = Get-NetAdapter -Name $interface -ErrorAction SilentlyContinue
-    if (-not($adapter)) {
-        arLog "> arDevIp4 - Can't get network adapter interface"
-        return $false
+    if ($ipVersion -eq "6") {
+        return @{
+            RecordType = "AAAA"
+            AddressFamily = "IPv6"
+            QueryUrl = $arIp6QueryUrl
+            Pattern = '^[0-9a-fA-F:]+$'
+        }
     }
 
-    $hostIp = Get-NetIPAddress -InterfaceAlias $interface -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress
-
-    if (-not $hostIp) {
-        arLog "> arDevIp4 - Can't get ip address"
-        return $false
+    return @{
+        RecordType = "A"
+        AddressFamily = "IPv4"
+        QueryUrl = $arIp4QueryUrl
+        Pattern = '^[0-9\.]+$'
     }
-
-    if ($hostIp -notmatch '^[0-9\.]+$') {
-        arLog "> arDevIp4 - Invalid ip address"
-        return $false
-    }
-
-    return $hostIp
 }
 
-# Get IPv6 by ip route or network
-function arWanIp6 {
-    $hostIp = arRequest $arIp6QueryUrl
-
-    if (-not $hostIp) {
-        arLog "> arWanIp6 - Can't get ip address"
-        return $true
-    }
-
-    if ($hostIp -notmatch '^[0-9a-fA-F:]+$') {
-        arLog "> arWanIp6 - Invalid ip address"
-        return $false
-    }
-
-    return $hostIp
-}
-
-# Get IPv6 from a specific interface
-# Args: interface
-function arDevIp6 {
+# Get host ip from query url or a specific interface
+# Args: ipVersion interface
+function arGetHostIp {
     param (
-        [string]$interface
+        [string]$ipVersion,
+        [string]$interface = $null
     )
 
-    $adapter = Get-NetAdapter -Name $interface -ErrorAction SilentlyContinue
-    if (-not($adapter)) {
-        arLog "> arDevIp6 - Can't get network adapter interface"
-        return $false
+    $ipConfig = arGetIpConfig $ipVersion
+
+    if ($interface) {
+        $adapter = Get-NetAdapter -Name $interface -ErrorAction SilentlyContinue
+        if (-not $adapter) {
+            arLog "> arGetHostIp - Can't get network adapter interface"
+            return $false
+        }
+
+        $hostIp = Get-NetIPAddress -InterfaceAlias $interface -AddressFamily $ipConfig.AddressFamily -ErrorAction SilentlyContinue |
+            Where-Object {
+                if ($ipConfig.AddressFamily -eq "IPv6") {
+                    $_.IPAddress -notmatch '^fe80:'
+                } else {
+                    $_.IPAddress -notmatch '^169\.254\.'
+                }
+            } |
+            Select-Object -First 1 -ExpandProperty IPAddress
+
+        if (-not $hostIp) {
+            arLog "> arGetHostIp - Can't get ip address"
+            return $false
+        }
+    } else {
+        $hostIp = arRequest $ipConfig.QueryUrl
+        if (-not $hostIp) {
+            arLog "> arGetHostIp - Can't get ip address, fallback to auto"
+            return $null
+        }
     }
 
-    $hostIp = Get-NetIPAddress -InterfaceAlias $interface -AddressFamily IPv6 | Select-Object -ExpandProperty IPAddress
-
-    if (-not $hostIp) {
-        arLog "> arDevIp6 - Can't get ip address"
-        return $false
-    }
-
-    if ($hostIp -notmatch '^[0-9a-fA-F:]+$') {
-        arLog "> arDevIp6 - Invalid ip address"
+    if ($hostIp -notmatch $ipConfig.Pattern) {
+        arLog "> arGetHostIp - Invalid ip address"
         return $false
     }
 
@@ -288,24 +269,14 @@ function arDdnsCheck {
     arLog "=== Check $subdomain.$domain ==="
     arLog "Fetching Host Ip"
 
-    if ($ipVersion -eq "6" -and $interface) {
-        $recordType = "AAAA"
-        $hostIp = arDevIp6 $interface
-    } elseif ($ipVersion -eq "4" -and $interface) {
-        $recordType = "A"
-        $hostIp = arDevIp4 $interface
-    } elseif ($ipVersion -eq "6") {
-        $recordType = "AAAA"
-        $hostIp = arWanIp6
-    } else {
-        $recordType = "A"
-        $hostIp = arWanIp4
-    }
+    $ipConfig = arGetIpConfig $ipVersion
+    $recordType = $ipConfig.RecordType
+    $hostIp = arGetHostIp $ipVersion $interface
 
     if ($hostIp -eq $false) {
         exit 20
         return $false
-    } elseif ($hostIp -eq $true) {
+    } elseif ($null -eq $hostIp) {
         arLog "> Host Ip: Auto"
         arLog "> Record Type: $recordType"
     } else {
