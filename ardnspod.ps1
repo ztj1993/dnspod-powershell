@@ -18,8 +18,8 @@ $ErrorActionPreference = "Stop"
 $arToken = $env:arToken
 
 # The url to be used for querying public ip address.
-$arIp4QueryUrl = "http://ipv4.rehi.org/ip"
-$arIp6QueryUrl = "http://ipv6.rehi.org/ip"
+$arIp4QueryUrl = "http://ipv4.ddnsip.cn"
+$arIp6QueryUrl = "http://ipv6.ddnsip.cn"
 
 # The temp file to store the last record ip
 $arLastRecordFile = Join-Path $env:TEMP "ardnspod_last_record"
