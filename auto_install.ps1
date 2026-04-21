@@ -131,7 +131,7 @@ Set-Location -Path (Split-Path -Parent `$MyInvocation.MyCommand.Path)
 Start-Transcript -Path "$TaskName.log" -Append
 . .\ardnspod.ps1
 `$arToken = '$Token'
-`$arIsCreate = $boolIsCreate
+`$arIsCreateRecord = $boolIsCreate
 arDdnsCheck '$Domain' '$Subdomain' '$IpVersion' '$Interface'
 "@
 
