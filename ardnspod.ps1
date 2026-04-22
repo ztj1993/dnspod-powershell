@@ -33,12 +33,21 @@ $arErrCodeUnchanged = $null
 # when the domain record is missing, and 0 (false) otherwise.
 $arIsCreateRecord = $false
 
-# Output log to stderr
+# Outputs a log message to the console and optionally exits with error code
+# Args: message - The message to be logged
+#       errorCode - The error code to exit with (0 means no exit)
 function arLog {
-    param (
-        [string]$message
+    param(
+        [string] $Message,
+        [Nullable[int]] $ErrorCode = $null
     )
-    Write-Host $message
+
+    Write-Host $Message
+
+    if ($ErrorCode -ne $null) {
+        $Global:LASTEXITCODE = $ErrorCode
+        break
+    }
 }
 
 # Use Invoke-WebRequest to open url
@@ -64,8 +73,7 @@ function arRequest {
         $response = Invoke-WebRequest @params -UseBasicParsing
         return $response.Content.Trim()
     } catch {
-        arLog "> arRequest - Error: $_"
-        return $false
+        arLog "> arRequest - Error: $_" -ErrorCode 1
     }
 }
 
@@ -106,8 +114,7 @@ function arGetHostIp {
     if ($interface) {
         $adapter = Get-NetAdapter -Name $interface -ErrorAction SilentlyContinue
         if (-not $adapter) {
-            arLog "> arGetHostIp - Can't get network adapter interface"
-            return $false
+            arLog "> arGetHostIp - Can't get network adapter interface" -ErrorCode 1
         }
 
         $hostIp = Get-NetIPAddress -InterfaceAlias $interface -AddressFamily $ipConfig.AddressFamily -ErrorAction SilentlyContinue |
@@ -121,8 +128,7 @@ function arGetHostIp {
             Select-Object -First 1 -ExpandProperty IPAddress
 
         if (-not $hostIp) {
-            arLog "> arGetHostIp - Can't get ip address"
-            return $false
+            arLog "> arGetHostIp - Can't get ip address" -ErrorCode 1
         }
     } else {
         $hostIp = arRequest $ipConfig.QueryUrl
@@ -133,8 +139,7 @@ function arGetHostIp {
     }
 
     if ($hostIp -notmatch $ipConfig.Pattern) {
-        arLog "> arGetHostIp - Invalid ip address"
-        return $false
+        arLog "> arGetHostIp - Invalid ip address" -ErrorCode 1
     }
 
     return $hostIp
@@ -164,8 +169,7 @@ function arDdnsApi {
         }
         return $json
     } catch {
-        arLog "> arDdnsApi - Error: $_"
-        return $false
+        arLog "> arDdnsApi - Error: $_" -ErrorCode 1
     }
 }
 
@@ -187,13 +191,12 @@ function arDdnsLookup {
     $resp = arDdnsApi "Record.List" "domain=$domain$subDomainRule&record_type=$recordType"
     if ($resp.status.code -ne 1) {
         $errMsg = $resp.status.message
-        arLog "> arDdnsLookup - Error: $errMsg"
         if ($arIsCreateRecord -eq 1) {
             if ($errMsg -eq "No records on the list") {
-                return $true
+                return $null
             }
         }
-        return $false
+        arLog "> arDdnsLookup - Error: $errMsg" -ErrorCode 1
     }
 
     return $resp.records.id
@@ -273,10 +276,7 @@ function arDdnsCheck {
     $recordType = $ipConfig.RecordType
     $hostIp = arGetHostIp $ipVersion $interface
 
-    if ($hostIp -eq $false) {
-        exit 20
-        return $false
-    } elseif ($null -eq $hostIp) {
+    if ($null -eq $hostIp) {
         arLog "> Host Ip: Auto"
         arLog "> Record Type: $recordType"
     } else {
@@ -287,19 +287,12 @@ function arDdnsCheck {
     arLog "Fetching RecordId"
     $recordId = arDdnsLookup $domain $subdomain $recordType
 
-    if ($recordId -eq $false) {
-        return $false
-    } elseif ($recordId -eq $true) {
+    if ($recordId -eq $null) {
         arLog "Creating Record value"
         $recordId = arDdnsCreate $domain $subdomain $recordType $hostIp
-        if ($recordId -eq $false) {
-            return $false
-        }
-        arLog "> Record Id: $recordId"
-    } else {
-        arLog "> Record Id: $recordId"
     }
 
+    arLog "> Record Id: $recordId"
     arLog "Updating Record value"
     arDdnsUpdate $domain $subdomain $recordId $recordType $hostIp
 }
@@ -321,8 +314,7 @@ function arDdnsCreate {
     $recordCode = $resp.status.code
     if ($recordCode -ne 1) {
         $errMsg = $resp.status.message
-        arLog "> arDdnsCreate - error: $errMsg"
-        return $false
+        arLog "> arDdnsCreate - error: $errMsg" -ErrorCode 1
     }
 
     arLog "> arDdnsCreate - created"
@@ -350,8 +342,8 @@ function arDdnsDelete {
 
     arLog "Fetching RecordId"
     $recordId = arDdnsLookup $domain $subdomain $recordType
-    if ($recordId -is [bool]) {
-        return $null
+    if ($recordId -eq $null) {
+        arLog "> Record not found" -ErrorCode 0
     } else {
         arLog "> Record Id: $recordId"
     }
@@ -363,8 +355,7 @@ function arDdnsDelete {
     $recordCode = $resp.status.code
     if ($recordCode -ne 1) {
         $errMsg = $resp.status.message
-        arLog "> arDdnsDelete - error: $errMsg"
-        return $false
+        arLog "> arDdnsDelete - error: $errMsg" -ErrorCode 1
     }
 
     arLog "> arDdnsDelete - successful"
